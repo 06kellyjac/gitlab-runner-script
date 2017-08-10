@@ -1,0 +1,39 @@
+#!/bin/sh
+PIPE=/tmp/mkfifo
+
+echo "Enter your runner name:"
+printf "[Default: gitlab-runner-$(whoami)]: "
+read -p 'gitlab-runner-' INPUT0
+echo
+echo "Enter your GitLab CI coordinator URL"
+printf "[Default: https://gitlab.com/]: "
+read -p '' INPUT1
+echo
+echo "Enter your Registration Token e.g. T-Q_J5CNMLxBg1J4MvrB"
+read -p '' INPUT2
+echo
+[[ -z "$INPUT2" ]] && { >&2 echo "ERROR: Empty Registration Token" ; exit 1; }
+
+NAME=${INPUT0:-$(whoami)}
+URL=${INPUT1:-https://gitlab.com/}
+REG_TOKEN=$INPUT2
+mkfifo $PIPE
+cat << EOF > $PIPE &
+RUNNER_EXECUTOR=docker
+RUNNER_NAME=gitlab-runner-$NAME
+CI_SERVER_URL=$URL
+REGISTRATION_TOKEN=$REG_TOKEN
+DOCKER_IMAGE=alpine:latest
+DOCKER_PRIVILEGED=true
+EOF
+echo
+docker run \
+--env-file $PIPE -d \
+--name gitlab-runner \
+--restart always \
+-v /srv/gitlab-runner/config:/etc/gitlab-runner \
+-v /var/run/docker.sock:/var/run/docker.sock \
+gitlab/gitlab-runner:alpine
+docker exec gitlab-runner gitlab-runner register -n
+rm $PIPE
+
